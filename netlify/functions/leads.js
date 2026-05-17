@@ -27,12 +27,14 @@ exports.handler = async function(event) {
   const near = encodeURIComponent(city);
   const lim = Math.min(parseInt(limit) || 30, 50);
 
-  const url = `https://api.foursquare.com/v3/places/search?query=${query}&near=${near}&limit=${lim}&fields=fsq_id,name,location,tel,website,rating,categories`;
+  // New Foursquare endpoint for accounts created after June 17, 2025
+  const url = `https://places-api.foursquare.com/places/search?query=${query}&near=${near}&limit=${lim}&fields=fsq_place_id,name,location,tel,website,rating,categories`;
 
   const fetchData = (url) => new Promise((resolve, reject) => {
     https.get(url, {
       headers: {
-        'Authorization': apiKey,
+        'Authorization': `Bearer ${apiKey}`,
+        'X-Places-Api-Version': '2025-06-17',
         'Accept': 'application/json'
       }
     }, (res) => {
@@ -51,6 +53,7 @@ exports.handler = async function(event) {
     if (result.status !== 200) {
       return { statusCode: 200, headers, body: JSON.stringify({
         error: result.data.message || JSON.stringify(result.data) || `API error: ${result.status}`,
+        status: result.status,
         debug: result.data
       })};
     }
