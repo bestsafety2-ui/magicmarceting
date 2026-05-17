@@ -27,7 +27,6 @@ exports.handler = async function(event) {
   const near = encodeURIComponent(city);
   const lim = Math.min(parseInt(limit) || 30, 50);
 
-  // New Foursquare endpoint for accounts created after June 17, 2025
   const url = `https://places-api.foursquare.com/places/search?query=${query}&near=${near}&limit=${lim}&fields=fsq_place_id,name,location,tel,website,rating,categories`;
 
   const fetchData = (url) => new Promise((resolve, reject) => {
@@ -41,8 +40,7 @@ exports.handler = async function(event) {
       let raw = '';
       res.on('data', chunk => raw += chunk);
       res.on('end', () => {
-        try { resolve({ status: res.statusCode, data: JSON.parse(raw) }); }
-        catch(e) { resolve({ status: res.statusCode, data: { raw: raw.substring(0, 500) } }); }
+        resolve({ status: res.statusCode, raw, data: (() => { try { return JSON.parse(raw); } catch(e) { return { parseError: raw.substring(0, 500) }; } })() });
       });
     }).on('error', reject);
   });
@@ -50,15 +48,24 @@ exports.handler = async function(event) {
   try {
     const result = await fetchData(url);
 
+    // Always return debug info so we can see exactly what Foursquare sends back
     if (result.status !== 200) {
       return { statusCode: 200, headers, body: JSON.stringify({
-        error: result.data.message || JSON.stringify(result.data) || `API error: ${result.status}`,
-        status: result.status,
-        debug: result.data
+        error: `Foursquare returned status ${result.status}`,
+        debug: result.data,
+        rawPreview: result.raw.substring(0, 500)
       })};
     }
 
     const results = result.data.results || [];
+
+    // If no results, return debug info
+    if (!results.length) {
+      return { statusCode: 200, headers, body: JSON.stringify({
+        error: `No results — raw Foursquare response: ${result.raw.substring(0, 800)}`,
+        debug: result.data
+      })};
+    }
 
     const businesses = results.map(p => ({
       name: p.name,
@@ -77,6 +84,6 @@ exports.handler = async function(event) {
     })};
 
   } catch(e) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: e.message }) };
+    return { statusCode: 500, headers, body: JSON.stringify({ error: e.message, stack: e.stack }) };
   }
 };
