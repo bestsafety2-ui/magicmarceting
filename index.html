@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MARCeting">
+<meta name="theme-color" content="#1a2340">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/favicon.png">
+<title>Magic MARCeting</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #1a2340;
+    --navy-mid: #222d4a;
+    --navy-light: #2d3a5c;
+    --gold: #c9a84c;
+    --gold-light: #e8c97a;
+    --gold-dim: #8a6d2f;
+    --white: #f5f3ee;
+    --gray: #8a90a0;
+    --card-bg: #1e2b48;
+    --border: rgba(201,168,76,0.18);
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    height: 100%;
+    overscroll-behavior: none;
+  }
+
+  body {
+    background: var(--navy);
+    color: var(--white);
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bottom);
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 10% 20%, rgba(201,168,76,0.07) 0%, transparent 50%),
+      radial-gradient(ellipse at 90% 80%, rgba(201,168,76,0.05) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* HEADER */
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(26,35,64,0.97);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .logo-area { display: flex; align-items: center; gap: 10px; }
+
+  .logo-icon {
+    width: 44px; height: 44px;
+    background: linear-gradient(135deg, var(--navy-light), var(--navy-mid));
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 22px; font-weight: 700;
+    color: var(--gold);
+    position: relative; overflow: hidden; flex-shrink: 0;
+  }
+
+  .logo-icon::after {
+    content: '✦';
+    position: absolute; top: 2px; right: 3px;
+    font-size: 7px; color: var(--gold-light);
+  }
+
+  .logo-text h1 {
+    font-size: 17px; font-weight: 700;
+    letter-spacing: 1.5px; text-transform: uppercase;
+  }
+
+  .logo-text h1 span { color: var(--gold); }
+
+  .logo-text p {
+    font-size: 9px; color: var(--gray);
+    letter-spacing: 2px; text-transform: uppercase;
+  }
+
+  .header-badge {
+    background: linear-gradient(135deg, var(--gold-dim), var(--gold));
+    color: var(--navy);
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 1.5px; padding: 5px 12px;
+    border-radius: 20px; text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  /* MAIN */
+  main {
+    position: relative; z-index: 1;
+    padding: 16px 14px 100px;
+    max-width: 700px; margin: 0 auto;
+  }
+
+  /* SEARCH PANEL */
+  .search-panel {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px 18px;
+    margin-bottom: 16px;
+    position: relative; overflow: hidden;
+  }
+
+  .search-panel::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  }
+
+  .panel-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 20px; font-weight: 600;
+    color: var(--gold-light); margin-bottom: 4px;
+  }
+
+  .panel-sub {
+    font-size: 11px; color: var(--gray);
+    letter-spacing: 1px; margin-bottom: 18px;
+    line-height: 1.5;
+  }
+
+  .field-group {
+    display: flex; flex-direction: column; gap: 5px;
+    margin-bottom: 12px;
+  }
+
+  label {
+    font-size: 10px; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--gold); font-weight: 600;
+  }
+
+  #apiKeyInput {
+    -webkit-text-security: disc;
+    text-security: disc;
+  }
+
+  input, select {
+    background: rgba(26,35,64,0.8);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--white);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 16px; /* prevents iOS zoom */
+    padding: 13px 14px;
+    outline: none;
+    transition: border-color 0.2s;
+    width: 100%;
+    -webkit-appearance: none;
+  }
+
+  input::placeholder { color: var(--gray); }
+
+  input:focus, select:focus {
+    border-color: var(--gold);
+    box-shadow: 0 0 0 3px rgba(201,168,76,0.1);
+  }
+
+  select option { background: var(--navy-mid); }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  .btn-search {
+    background: linear-gradient(135deg, var(--gold-dim), var(--gold));
+    color: var(--navy); border: none; border-radius: 10px;
+    padding: 15px; width: 100%;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 15px; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase;
+    cursor: pointer; transition: all 0.2s;
+    margin-top: 4px;
+    -webkit-appearance: none;
+  }
+
+  .btn-search:active { transform: scale(0.98); opacity: 0.9; }
+  .btn-search:disabled { opacity: 0.5; }
+
+  /* STATS */
+  .stats-row {
+    display: grid; grid-template-columns: repeat(2, 1fr);
+    gap: 10px; margin-bottom: 16px;
+  }
+
+  .stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px;
+    text-align: center; position: relative; overflow: hidden;
+  }
+
+  .stat-card::after {
+    content: '';
+    position: absolute; bottom: 0; left: 20%; right: 20%; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  }
+
+  .stat-num {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 32px; font-weight: 700;
+    color: var(--gold-light); line-height: 1;
+  }
+
+  .stat-label {
+    font-size: 10px; color: var(--gray);
+    letter-spacing: 1.5px; text-transform: uppercase; margin-top: 5px;
+  }
+
+  /* RESULTS */
+  .results-panel {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 16px; overflow: hidden;
+  }
+
+  .results-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 18px; border-bottom: 1px solid var(--border);
+  }
+
+  .results-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 18px; color: var(--gold-light);
+  }
+
+  .results-actions { display: flex; gap: 8px; }
+
+  .btn-secondary {
+    background: transparent;
+    border: 1px solid var(--border); border-radius: 8px;
+    color: var(--gold);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 11px; font-weight: 600;
+    letter-spacing: 1px; text-transform: uppercase;
+    padding: 7px 12px; cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .btn-secondary:active { background: rgba(201,168,76,0.1); }
+
+  /* LEAD CARDS (mobile-friendly cards instead of table) */
+  .lead-card {
+    padding: 16px 18px;
+    border-bottom: 1px solid rgba(201,168,76,0.07);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+
+  .lead-card:last-child { border-bottom: none; }
+
+  .lead-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+
+  .business-name {
+    font-weight: 700; color: var(--white);
+    font-size: 16px; line-height: 1.2;
+  }
+
+  .business-meta {
+    font-size: 11px; color: var(--gray);
+    letter-spacing: 1px; text-transform: uppercase; margin-top: 2px;
+  }
+
+  .badges { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+  .badge {
+    display: inline-block; padding: 3px 9px;
+    border-radius: 20px; font-size: 11px; font-weight: 600; letter-spacing: 0.5px;
+  }
+
+  .badge-no-site {
+    background: rgba(220,60,60,0.15); color: #f08080;
+    border: 1px solid rgba(220,60,60,0.3);
+  }
+
+  .badge-hot {
+    background: rgba(201,168,76,0.15); color: var(--gold-light);
+    border: 1px solid rgba(201,168,76,0.3);
+  }
+
+  .badge-has-site {
+    background: rgba(60,180,60,0.1); color: #80c080;
+    border: 1px solid rgba(60,180,60,0.3);
+  }
+
+  .lead-details {
+    display: flex; justify-content: space-between;
+    align-items: center; gap: 10px;
+  }
+
+  .lead-info { font-size: 13px; color: var(--gray); line-height: 1.5; }
+
+  .rating { color: var(--gold-light); font-weight: 600; font-size: 13px; }
+
+  .btn-outreach {
+    background: linear-gradient(135deg, var(--gold-dim), var(--gold));
+    color: var(--navy); border: none; border-radius: 8px;
+    padding: 9px 16px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px; font-weight: 700; letter-spacing: 1px;
+    cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  }
+
+  .btn-outreach:active { opacity: 0.85; transform: scale(0.97); }
+
+  /* EMPTY / LOADING */
+  .empty-state, .loading {
+    text-align: center; padding: 50px 20px;
+  }
+
+  .empty-icon { font-size: 44px; margin-bottom: 14px; opacity: 0.5; }
+
+  .empty-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 20px; color: var(--gold-light); margin-bottom: 6px;
+  }
+
+  .empty-sub { font-size: 13px; color: var(--gray); }
+
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid rgba(201,168,76,0.2);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 14px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading p { color: var(--gold-light); font-size: 13px; letter-spacing: 2px; text-transform: uppercase; }
+
+  /* MODAL */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(10,15,30,0.88);
+    z-index: 200; align-items: flex-end; justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+
+  .modal-overlay.active { display: flex; }
+
+  .modal {
+    background: var(--navy-mid);
+    border: 1px solid var(--border);
+    border-radius: 20px 20px 0 0;
+    padding: 24px 20px calc(24px + var(--safe-bottom));
+    width: 100%; max-height: 85vh; overflow-y: auto;
+    position: relative;
+    animation: slideUp 0.25s ease;
+  }
+
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+
+  .modal-handle {
+    width: 40px; height: 4px;
+    background: rgba(201,168,76,0.3); border-radius: 2px;
+    margin: 0 auto 20px;
+  }
+
+  .modal::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    border-radius: 20px 20px 0 0;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  }
+
+  .modal-close {
+    position: absolute; top: 20px; right: 18px;
+    background: rgba(201,168,76,0.1); border: 1px solid var(--border);
+    border-radius: 50%; color: var(--gray);
+    font-size: 16px; cursor: pointer;
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .modal-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 22px; color: var(--gold-light); margin-bottom: 4px;
+  }
+
+  .modal-biz { font-size: 13px; color: var(--gray); margin-bottom: 18px; }
+
+  .tabs { display: flex; gap: 8px; margin-bottom: 14px; overflow-x: auto; padding-bottom: 2px; }
+  .tabs::-webkit-scrollbar { display: none; }
+
+  .tab {
+    background: transparent; border: 1px solid var(--border);
+    border-radius: 20px; color: var(--gray);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 12px; font-weight: 600;
+    letter-spacing: 1px; padding: 7px 16px;
+    cursor: pointer; text-transform: uppercase; white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .tab.active {
+    background: rgba(201,168,76,0.15);
+    border-color: var(--gold); color: var(--gold);
+  }
+
+  .message-box {
+    background: rgba(26,35,64,0.8);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px; font-size: 14px; line-height: 1.7;
+    color: var(--white); min-height: 140px;
+    white-space: pre-wrap; margin-bottom: 16px;
+  }
+
+  .modal-btns { display: flex; gap: 10px; }
+  .modal-btns .btn-search { flex: 1; padding: 13px; }
+  .modal-btns .btn-secondary { flex: 1; padding: 13px; text-align: center; }
+
+  /* BOTTOM NAV */
+  .bottom-nav {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: rgba(26,35,64,0.97);
+    border-top: 1px solid var(--border);
+    padding: 10px 0 calc(10px + var(--safe-bottom));
+    display: flex; justify-content: space-around;
+    z-index: 40; backdrop-filter: blur(12px);
+  }
+
+  .nav-btn {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 3px;
+    background: none; border: none;
+    color: var(--gray); cursor: pointer;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 10px; letter-spacing: 1px;
+    text-transform: uppercase; padding: 4px 20px;
+    transition: color 0.2s;
+  }
+
+  .nav-btn.active { color: var(--gold); }
+  .nav-btn span { font-size: 20px; }
+
+  /* INSTALL BANNER */
+  .install-banner {
+    display: none;
+    background: rgba(201,168,76,0.1);
+    border: 1px solid rgba(201,168,76,0.3);
+    border-radius: 12px; padding: 12px 16px;
+    margin-bottom: 16px;
+    display: flex; align-items: center; gap: 12px;
+  }
+
+  .install-banner p { font-size: 13px; color: var(--gold-light); flex: 1; line-height: 1.5; }
+
+  .btn-install {
+    background: linear-gradient(135deg, var(--gold-dim), var(--gold));
+    color: var(--navy); border: none; border-radius: 8px;
+    padding: 8px 14px; font-family: 'Rajdhani', sans-serif;
+    font-size: 12px; font-weight: 700; letter-spacing: 1px;
+    cursor: pointer; white-space: nowrap;
+  }
+
+  .install-banner.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-area">
+    <div class="logo-icon">M</div>
+    <div class="logo-text">
+      <h1>MAGIC <span>MARC</span>eting</h1>
+      <p>Online Marketing • Website Creation</p>
+    </div>
+  </div>
+  <div class="header-badge">✦ Leads</div>
+</header>
+
+<main>
+
+  <!-- INSTALL BANNER -->
+  <div class="install-banner hidden" id="installBanner">
+    <p>📲 Add to your home screen for instant access like an app!</p>
+    <button class="btn-install" id="installBtn">Install</button>
+  </div>
+
+  <!-- SEARCH -->
+  <div class="search-panel">
+    <div class="panel-title">✦ Find Your Next Client</div>
+    <p class="panel-sub">SEARCH BUSINESSES WITHOUT WEBSITES — YOUR NEXT PAYING CUSTOMER IS WAITING</p>
+
+    <div class="two-col">
+      <div class="field-group">
+        <label>City</label>
+        <input type="text" id="cityInput" placeholder="Miami, Phoenix..." autocomplete="off" />
+      </div>
+      <div class="field-group">
+        <label>Business Type</label>
+        <select id="typeSelect">
+          <option value="restaurant">Restaurants</option>
+          <option value="salon">Salons & Barbershops</option>
+          <option value="gym">Gyms & Fitness</option>
+          <option value="contractor">Contractors</option>
+          <option value="realtor">Real Estate Agents</option>
+          <option value="retail">Retail Boutiques</option>
+          <option value="food truck">Food Trucks</option>
+          <option value="cleaning service">Cleaning Services</option>
+          <option value="dentist">Dental Offices</option>
+          <option value="auto repair">Auto Repair</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <label id="apiLabel">API Key <span style="color:var(--gold-dim);font-size:9px">(AUTO-SAVED)</span></label>
+      <input type="text" id="apiKeyInput" placeholder="Foursquare API Key (starts with fsq3...)" oninput="saveApiKey()" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="text" name="fsq_api_key_field" />
+    </div>
+
+    <button class="btn-search" id="searchBtn" onclick="runSearch()">🔍 Search Leads</button>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-num" id="statTotal">0</div>
+      <div class="stat-label">Found</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" id="statNoSite">0</div>
+      <div class="stat-label">No Website</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" id="statRevenue">$0</div>
+      <div class="stat-label">Potential $</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" id="statEmails">0</div>
+      <div class="stat-label">Sent</div>
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="results-panel">
+    <div class="results-header">
+      <div class="results-title">Lead Results</div>
+      <div class="results-actions">
+        <button class="btn-secondary" onclick="exportCSV()">⬇ CSV</button>
+        <button class="btn-secondary" onclick="massOutreach()">✉ Blast</button>
+      </div>
+    </div>
+    <div id="resultsBody">
+      <div class="empty-state">
+        <div class="empty-icon">🎯</div>
+        <div class="empty-title">Ready to Find Leads</div>
+        <p class="empty-sub">Enter a city and hit Search</p>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- BOTTOM NAV -->
+<div class="bottom-nav">
+  <button class="nav-btn active" onclick="scrollTo(0,0)">
+    <span>🔍</span>Search
+  </button>
+  <button class="nav-btn" onclick="exportCSV()">
+    <span>📋</span>Export
+  </button>
+  <button class="nav-btn" onclick="massOutreach()">
+    <span>✉️</span>Outreach
+  </button>
+</div>
+
+<!-- OUTREACH MODAL (slides up from bottom) -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title">Outreach Message</div>
+    <div class="modal-biz" id="modalBizName"></div>
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('dm', this)">Instagram DM</button>
+      <button class="tab" onclick="switchTab('email', this)">Email</button>
+      <button class="tab" onclick="switchTab('text', this)">Text / SMS</button>
+    </div>
+    <div class="message-box" id="messageBox"></div>
+    <div class="modal-btns">
+      <button class="btn-secondary" onclick="copyMessage()">Copy</button>
+      <button class="btn-search" onclick="markSent()">Mark Sent ✓</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Register service worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+
+let leads = [];
+let currentBiz = null;
+let currentTab = 'dm';
+let emailsSent = 0;
+let deferredPrompt = null;
+
+// PWA install prompt
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('installBanner').classList.remove('hidden');
+});
+
+document.getElementById('installBtn')?.addEventListener('click', async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
+  if (outcome === 'accepted') document.getElementById('installBanner').classList.add('hidden');
+  deferredPrompt = null;
+});
+
+// Auto-load saved API key (only if it's the new Foursquare format)
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('mm_api_key');
+  // Clear out old non-Foursquare keys
+  if (saved && !saved.startsWith('fsq')) {
+    localStorage.removeItem('mm_api_key');
+    return;
+  }
+  if (saved) {
+    document.getElementById('apiKeyInput').value = saved;
+    document.getElementById('apiLabel').innerHTML = 'API Key <span style="color:#80c080;font-size:9px">✓ SAVED</span>';
+  }
+});
+
+function saveApiKey() {
+  const val = document.getElementById('apiKeyInput').value.trim();
+  if (val.length > 10) {
+    try {
+      localStorage.setItem('mm_api_key', val);
+      document.getElementById('apiLabel').innerHTML = 'API Key <span style="color:#80c080;font-size:9px">✓ SAVED</span>';
+    } catch(e) {
+      // localStorage might fail silently — ignore
+    }
+  }
+}
+
+const MESSAGES = {
+  dm: (name, city) => `Hey ${name}! 👋\n\nI was browsing local businesses in ${city} and noticed you don't have a website yet — I think that's a huge opportunity for you.\n\nI'm Marc with Magic MARCeting. I build clean, professional websites fast and affordable — most done within 48–72 hours.\n\nA website helps you get found on Google, take bookings, and look more legit to new customers. 💯\n\nWould you be open to a quick chat? No pressure at all!`,
+  email: (name, city) => `Subject: Your Business Deserves a Professional Website\n\nHi ${name},\n\nI came across your business in ${city} and noticed you may not have a website yet.\n\nI'm Marc — founder of Magic MARCeting, specializing in fast, affordable websites for small businesses.\n\n✅ Professional website — ready in 48–72 hours\n✅ Mobile-friendly & SEO optimized\n✅ Starting at just $299\n\nYour competitors are online. Let's make sure you are too.\n\nReply or call/text me for a free 15-min call.\n\nBest,\nMarc\nMagic MARCeting`,
+  text: (name) => `Hey ${name}, this is Marc from Magic MARCeting! I noticed your business doesn't have a website. I build pro sites fast — most ready in 48hrs, starting at $299. Want a free quote? 🙌`
+};
+
+async function runSearch() {
+  const city = document.getElementById('cityInput').value.trim();
+  const type = document.getElementById('typeSelect').value;
+  const apiKey = document.getElementById('apiKeyInput').value.trim();
+
+  if (!city) { alert('Please enter a city.'); return; }
+  if (!apiKey) { alert('Please enter your Foursquare API key.'); return; }
+
+  document.getElementById('searchBtn').disabled = true;
+  document.getElementById('resultsBody').innerHTML = `
+    <div class="loading">
+      <div class="spinner"></div>
+      <p>Scanning ${city}...</p>
+    </div>`;
+
+  try {
+    const resp = await fetch('/.netlify/functions/leads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ city, type, apiKey, limit: 30 })
+    });
+    const data = await resp.json();
+
+    if (data.error) {
+      throw new Error(data.error);
+    }
+    if (!data.businesses?.length) {
+      document.getElementById('resultsBody').innerHTML = `
+        <div class="empty-state"><div class="empty-icon">🔍</div>
+        <div class="empty-title">No Results</div>
+        <p class="empty-sub">Try a different city or business type</p></div>`;
+      return;
+    }
+
+    // Foursquare returns hasWebsite directly - no website = HOT LEAD
+    leads = data.businesses.map(b => ({
+      name: b.name,
+      address: b.address,
+      phone: b.phone,
+      rating: b.rating,
+      categories: b.categories,
+      hasWebsite: b.hasWebsite,
+      website: b.website,
+      type, city
+    }));
+
+    renderResults();
+
+  } catch(e) {
+    console.error(e);
+    document.getElementById('resultsBody').innerHTML = `
+      <div class="empty-state"><div class="empty-icon">⚠️</div>
+      <div class="empty-title">Error</div>
+      <p class="empty-sub">${e.message || 'Something went wrong. Check your API key.'}</p></div>`;
+  } finally {
+    document.getElementById('searchBtn').disabled = false;
+  }
+}
+
+function renderResults() {
+  const noSite = leads.filter(l => !l.hasWebsite);
+  document.getElementById('statTotal').textContent = leads.length;
+  document.getElementById('statNoSite').textContent = noSite.length;
+  document.getElementById('statRevenue').textContent = `$${(noSite.length * 400).toLocaleString()}`;
+
+  if (!leads.length) {
+    document.getElementById('resultsBody').innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">No leads</div></div>`;
+    return;
+  }
+
+  let html = leads.map((l, i) => `
+    <div class="lead-card">
+      <div class="lead-top">
+        <div>
+          <div class="business-name">${l.name}</div>
+          <div class="business-meta">${l.type} · ${l.city}</div>
+        </div>
+        <div class="badges">
+          ${!l.hasWebsite
+            ? `<span class="badge badge-no-site">No Site</span><span class="badge badge-hot">🔥 HOT</span>`
+            : `<span class="badge badge-has-site">✓ Has Site</span>`
+          }
+        </div>
+      </div>
+      <div class="lead-details">
+        <div class="lead-info">
+          📞 ${l.phone}<br>
+          <span class="rating">⭐ ${l.rating}</span>
+        </div>
+        ${!l.hasWebsite ? `<button class="btn-outreach" onclick="openModal(${i})">✉ Reach Out</button>` : ''}
+      </div>
+    </div>`).join('');
+
+  document.getElementById('resultsBody').innerHTML = html;
+}
+
+function openModal(i) {
+  currentBiz = leads[i];
+  currentTab = 'dm';
+  document.getElementById('modalBizName').textContent = `${currentBiz.name} · ${currentBiz.city}`;
+  updateModalMessage();
+  document.querySelectorAll('.tab').forEach((t, idx) => t.classList.toggle('active', idx === 0));
+  document.getElementById('modalOverlay').classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+
+function updateModalMessage() {
+  document.getElementById('messageBox').textContent = MESSAGES[currentTab](currentBiz.name, currentBiz.city);
+}
+
+function switchTab(tab, el) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  updateModalMessage();
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('active');
+  document.body.style.overflow = '';
+}
+
+function copyMessage() {
+  navigator.clipboard.writeText(document.getElementById('messageBox').textContent).then(() => {
+    const btn = event.target;
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 1500);
+  });
+}
+
+function markSent() {
+  emailsSent++;
+  document.getElementById('statEmails').textContent = emailsSent;
+  closeModal();
+}
+
+function exportCSV() {
+  if (!leads.length) { alert('No leads to export yet.'); return; }
+  const headers = ['Business Name','Type','City','Address','Phone','Rating','Has Website'];
+  const rows = leads.map(l => [`"${l.name}"`, l.type, l.city, `"${l.address}"`, l.phone, l.rating, l.hasWebsite ? 'Yes' : 'No']);
+  const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+  a.download = 'magic-marceting-leads.csv';
+  a.click();
+}
+
+function massOutreach() {
+  const n = leads.filter(l => !l.hasWebsite).length;
+  if (!n) { alert('Run a search first to find leads.'); return; }
+  alert(`Mass Outreach Ready!\n\n${n} businesses have no website.\n\nStep 1: Export CSV\nStep 2: Import into GMass or Mailmeteor (free Chrome extensions)\nStep 3: Send personalized emails to all ${n} leads at once! 🚀`);
+}
+
+document.getElementById('modalOverlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modalOverlay')) closeModal();
+});
+</script>
+</body>
+</html>
