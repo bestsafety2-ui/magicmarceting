@@ -1,5 +1,5 @@
 const https = require('https');
-
+ 
 exports.handler = async function(event) {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -7,66 +7,62 @@ exports.handler = async function(event) {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Content-Type': 'application/json'
   };
-
+ 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers, body: '' };
   }
-
+ 
   let body = {};
   try {
     body = typeof event.body === 'string' ? JSON.parse(event.body) : (event.body || {});
   } catch(e) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON' }) };
   }
-
+ 
   const { city, type, apiKey, limit } = body;
   if (!apiKey) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing API key' }) };
   if (!city) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing city' }) };
-
+ 
   const query = encodeURIComponent(type || 'restaurant');
   const near = encodeURIComponent(city);
   const lim = Math.min(parseInt(limit) || 30, 50);
-
-  const url = `https://places-api.foursquare.com/places/search?query=${query}&near=${near}&limit=${lim}&fields=fsq_place_id,name,location,tel,website,rating,categories`;
-
+ 
+  const url = `https://api.foursquare.com/v3/places/search?query=${query}&near=${near}&limit=${lim}&fields=fsq_id,name,location,tel,website,rating,categories`;
+ 
   const fetchData = (url) => new Promise((resolve, reject) => {
     https.get(url, {
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'X-Places-Api-Version': '2025-06-17',
+        'Authorization': apiKey,
+        'X-Places-Api-Version': '2023-10-01',
         'Accept': 'application/json'
       }
     }, (res) => {
       let raw = '';
       res.on('data', chunk => raw += chunk);
       res.on('end', () => {
-        resolve({ status: res.statusCode, raw, data: (() => { try { return JSON.parse(raw); } catch(e) { return { parseError: raw.substring(0, 500) }; } })() });
+        try { resolve({ status: res.statusCode, data: JSON.parse(raw), raw }); }
+        catch(e) { resolve({ status: res.statusCode, data: {}, raw: raw.substring(0, 500) }); }
       });
     }).on('error', reject);
   });
-
+ 
   try {
     const result = await fetchData(url);
-
-    // Always return debug info so we can see exactly what Foursquare sends back
+ 
     if (result.status !== 200) {
       return { statusCode: 200, headers, body: JSON.stringify({
-        error: `Foursquare returned status ${result.status}`,
-        debug: result.data,
-        rawPreview: result.raw.substring(0, 500)
+        error: result.data.message || `API error ${result.status}: ${result.raw.substring(0, 300)}`
       })};
     }
-
+ 
     const results = result.data.results || [];
-
-    // If no results, return debug info
+ 
     if (!results.length) {
       return { statusCode: 200, headers, body: JSON.stringify({
-        error: `No results — raw Foursquare response: ${result.raw.substring(0, 800)}`,
-        debug: result.data
+        error: `No results from Foursquare. Raw: ${result.raw.substring(0, 400)}`
       })};
     }
-
+ 
     const businesses = results.map(p => ({
       name: p.name,
       address: [p.location?.address, p.location?.locality, p.location?.region].filter(Boolean).join(', ') || '',
@@ -76,14 +72,15 @@ exports.handler = async function(event) {
       hasWebsite: !!p.website,
       website: p.website || null
     }));
-
+ 
     return { statusCode: 200, headers, body: JSON.stringify({
       success: true,
       total: businesses.length,
       businesses
     })};
-
+ 
   } catch(e) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: e.message, stack: e.stack }) };
+    return { statusCode: 500, headers, body: JSON.stringify({ error: e.message }) };
   }
 };
+ 
