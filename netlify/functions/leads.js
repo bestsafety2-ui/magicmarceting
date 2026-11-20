@@ -1,9 +1,7 @@
 // Magic MARCeting — lead search (Netlify function)
 // POST { city, type }  ->  { success, total, businesses: [...] }  or  { error }
-// Free data: OpenStreetMap (Nominatim/Photon to find the city, Overpass for businesses). No API key.
-
-const UA = 'MagicMARCeting-LeadFinder/2.0 (+https://magicmarceting.netlify.app)';
-const BUDGET_MS = 9000; // Netlify cuts functions off at ~10s, so stay under it
+// Data: Geoapify (geocoding + Places). Free plan: 3,000 credits/day, no card.
+// The API key lives in Netlify: Site configuration -> Environment variables -> GEOAPIFY_KEY
 
 const HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -12,105 +10,54 @@ const HEADERS = {
   'Content-Type': 'application/json'
 };
 
-// Each business type searches several OpenStreetMap tags, so more real places show up
-const TYPE_TAGS = {
-  'restaurant':       ['amenity~"^(restaurant|cafe|fast_food|bar|pub|ice_cream)$"'],
-  'salon':            ['shop~"^(hairdresser|beauty|barber|cosmetics|massage|tattoo|nails)$"'],
-  'gym':              ['leisure~"^(fitness_centre|sports_centre)$"', 'sport~"^(martial_arts|boxing|yoga|crossfit)$"'],
-  'contractor':       ['craft~"^(builder|carpenter|electrician|plumber|roofer|painter|hvac|tiler|floorer|plasterer|window_construction)$"', 'office~"^(construction_company|contractor)$"'],
-  'realtor':          ['office~"^(estate_agent|property_management)$"'],
-  'retail':           ['shop~"^(clothes|boutique|shoes|gift|jewelry|fashion_accessories|bag)$"'],
-  'food truck':       ['amenity~"^(fast_food|food_court)$"', 'street_vendor=yes'],
-  'cleaning service': ['shop~"^(dry_cleaning|laundry)$"', 'craft=cleaning', 'office=cleaning'],
-  'dentist':          ['amenity=dentist', 'healthcare=dentist'],
-  'auto repair':      ['shop~"^(car_repair|tyres|car_parts|car)$"', 'amenity=car_wash']
+// App business type -> Geoapify categories (exact names from Geoapify's docs)
+const CATEGORIES = {
+  'restaurant':       'catering.restaurant,catering.cafe,catering.fast_food,catering.bar,catering.pub,catering.ice_cream',
+  'salon':            'service.beauty',
+  'gym':              'sport.fitness',
+  'contractor':       'service.electrician,service.carpenter,service.metal_construction',
+  'realtor':          'office.estate_agent,service.estate_agent',
+  'retail':           'commercial.clothing',
+  'food truck':       'catering.fast_food,catering.food_court',
+  'cleaning service': 'service.cleaning',
+  'dentist':          'healthcare.dentist',
+  'auto repair':      'service.vehicle.repair,service.vehicle.car_wash'
 };
 
-function respond(statusCode, obj) {
-  return { statusCode, headers: HEADERS, body: JSON.stringify(obj) };
-}
+const respond = (statusCode, obj) => ({ statusCode, headers: HEADERS, body: JSON.stringify(obj) });
 
-async function getJSON(url, ms, extraHeaders) {
+async function getJSON(url, ms) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
   try {
-    const res = await fetch(url, {
-      headers: { 'User-Agent': UA, 'Accept': 'application/json', ...(extraHeaders || {}) },
-      signal: ctrl.signal
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
+    const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: ctrl.signal });
+    const text = await res.text();
+    let data = null;
+    try { data = JSON.parse(text); } catch (e) { /* not JSON */ }
+    if (!res.ok) {
+      const msg = (data && (data.message || data.error)) || text.slice(0, 120);
+      const err = new Error(msg); err.status = res.status; throw err;
+    }
+    return data;
   } finally {
     clearTimeout(timer);
   }
 }
 
-// Find the city's coordinates. Nominatim first, Photon as a backup.
-async function geocode(city) {
-  try {
-    const q = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(city)}`;
-    const data = await getJSON(q, 3500, { 'Accept-Language': 'en' });
-    if (data && data[0]) return { lat: +data[0].lat, lon: +data[0].lon, label: data[0].display_name };
-  } catch (e) { /* fall through to backup */ }
-  try {
-    const q = `https://photon.komoot.io/api/?limit=1&q=${encodeURIComponent(city)}`;
-    const data = await getJSON(q, 3000);
-    const f = data && data.features && data.features[0];
-    if (f) return { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], label: f.properties.name };
-  } catch (e) { /* nothing found */ }
-  return null;
-}
-
-// Ask several Overpass servers at once and take whichever answers first
-async function overpass(query, ms) {
-  const servers = [
-    'https://overpass-api.de/api/interpreter',
-    'https://overpass.kumi.systems/api/interpreter',
-    'https://overpass.private.coffee/api/interpreter'
-  ];
-  const attempts = servers.map(s =>
-    getJSON(`${s}?data=${encodeURIComponent(query)}`, ms).then(d => {
-      if (!d || !Array.isArray(d.elements)) throw new Error('bad response');
-      return d;
-    })
-  );
-  return Promise.any(attempts);
-}
-
-function buildQuery(tags, lat, lon, radius) {
-  const around = `(around:${radius},${lat},${lon})`;
-  const parts = tags.map(t => `nwr[${t}][name]${around};`).join('');
-  return `[out:json][timeout:8];(${parts});out center tags 200;`;
-}
-
-function toBusiness(el, type, city) {
-  const t = el.tags || {};
-  const website = t.website || t['contact:website'] || t.url || null;
-  // Chains (McDonald's, Great Clips...) always have a corporate site, so they aren't real leads
-  const isChain = !!(t.brand || t['brand:wikidata']);
-  const phone = t.phone || t['contact:phone'] || t['contact:mobile'] || 'N/A';
-  const street = [t['addr:housenumber'], t['addr:street']].filter(Boolean).join(' ');
-  const address = [street, t['addr:city']].filter(Boolean).join(', ') || city;
-  return {
-    name: t.name,
-    address,
-    phone,
-    website,
-    hasWebsite: !!website || isChain,
-    chain: isChain,
-    email: t.email || t['contact:email'] || null,
-    instagram: t['contact:instagram'] || null,
-    facebook: t['contact:facebook'] || null,
-    rating: 'N/A',
-    categories: type
-  };
+function friendly(err) {
+  if (err.name === 'AbortError') return 'The lead search took too long. Please try again.';
+  if (err.status === 401 || err.status === 403) return 'The Geoapify API key is missing or wrong. Check GEOAPIFY_KEY in Netlify.';
+  if (err.status === 429) return "Today's free search limit is used up. It resets tomorrow.";
+  return 'Search failed: ' + (err.message || 'unknown error');
 }
 
 exports.handler = async function (event) {
   if (event.httpMethod === 'OPTIONS') return respond(200, {});
   if (event.httpMethod !== 'POST') return respond(405, { error: 'Use POST with { city, type }' });
 
-  const started = Date.now();
+  const KEY = process.env.GEOAPIFY_KEY;
+  if (!KEY) return respond(200, { error: 'Setup needed: add GEOAPIFY_KEY in Netlify environment variables, then redeploy.' });
+
   let body;
   try { body = typeof event.body === 'string' ? JSON.parse(event.body) : (event.body || {}); }
   catch (e) { return respond(400, { error: 'Invalid JSON' }); }
@@ -118,44 +65,58 @@ exports.handler = async function (event) {
   const city = String(body.city || '').trim();
   const type = String(body.type || 'restaurant').trim();
   if (!city) return respond(400, { error: 'Please enter a city.' });
-  const tags = TYPE_TAGS[type] || TYPE_TAGS['restaurant'];
+  const categories = CATEGORIES[type] || CATEGORIES['restaurant'];
 
-  const geo = await geocode(city);
-  if (!geo) {
-    return respond(200, { error: `Couldn't find "${city}". Try adding the state, like "Lombard, IL".` });
-  }
+  try {
+    // 1) Find the city
+    const geoUrl = `https://api.geoapify.com/v1/geocode/search?text=${encodeURIComponent(city)}&limit=1&format=json&apiKey=${KEY}`;
+    const geo = await getJSON(geoUrl, 4000);
+    const place = geo && geo.results && geo.results[0];
+    if (!place) return respond(200, { error: `Couldn't find "${city}". Try adding the state, like "Lombard, IL".` });
+    const { lat, lon } = place;
 
-  // Search 6 km around the city; if that's thin and time allows, widen to 15 km
-  let elements = [];
-  for (const radius of [6000, 15000]) {
-    const timeLeft = BUDGET_MS - (Date.now() - started);
-    if (timeLeft < 2500) break;
-    try {
-      const data = await overpass(buildQuery(tags, geo.lat, geo.lon, radius), timeLeft - 300);
-      elements = data.elements;
-    } catch (e) {
-      if (!elements.length) {
-        return respond(200, { error: 'The map servers are busy right now. Please try again in a minute.' });
-      }
-      break;
+    // 2) Businesses within ~8 km, nearest first, named ones only
+    const placesUrl = `https://api.geoapify.com/v2/places?categories=${categories}` +
+      `&conditions=named&filter=circle:${lon},${lat},8000&bias=proximity:${lon},${lat}&limit=100&apiKey=${KEY}`;
+    const data = await getJSON(placesUrl, 5000);
+    const features = (data && data.features) || [];
+
+    const seen = new Set();
+    const businesses = [];
+    for (const f of features) {
+      const p = f.properties || {};
+      const raw = (p.datasource && p.datasource.raw) || {};
+      const name = p.name || raw.name;
+      if (!name) continue;
+      const key = name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const website = p.website || raw.website || raw['contact:website'] || raw.url || null;
+      // Chains (McDonald's, Great Clips...) always have a corporate site, so they aren't real leads
+      const isChain = !!(p.brand || raw.brand || raw['brand:wikidata']);
+      const phone = (p.contact && p.contact.phone) || raw.phone || raw['contact:phone'] || 'N/A';
+      const street = [p.housenumber, p.street].filter(Boolean).join(' ');
+      const address = [street, p.city].filter(Boolean).join(', ') || p.address_line2 || city;
+
+      businesses.push({
+        name,
+        address,
+        phone,
+        website,
+        hasWebsite: !!website || isChain,
+        chain: isChain,
+        email: (p.contact && p.contact.email) || raw.email || raw['contact:email'] || null,
+        instagram: raw['contact:instagram'] || null,
+        facebook: raw['contact:facebook'] || null,
+        rating: 'N/A',
+        categories: type
+      });
     }
-    if (elements.length >= 25) break;
+
+    businesses.sort((a, b) => Number(a.hasWebsite) - Number(b.hasWebsite));
+    return respond(200, { success: true, total: businesses.length, location: place.formatted, businesses });
+  } catch (err) {
+    return respond(200, { error: friendly(err) });
   }
-
-  const seen = new Set();
-  const businesses = [];
-  for (const el of elements) {
-    const name = el.tags && el.tags.name;
-    if (!name) continue;
-    const key = name.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    businesses.push(toBusiness(el, type, city));
-  }
-
-  // No-website leads first, then cap the list
-  businesses.sort((a, b) => Number(a.hasWebsite) - Number(b.hasWebsite));
-  const list = businesses.slice(0, 80);
-
-  return respond(200, { success: true, total: list.length, location: geo.label, businesses: list });
 };
