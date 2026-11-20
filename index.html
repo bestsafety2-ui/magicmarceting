@@ -719,6 +719,8 @@
     background: linear-gradient(180deg, #b07a2a 0%, #d9a548 30%, #a86f22 55%, #7a4b13 100%);
     -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; text-shadow: none;
   }
+  footer .credit { display:block; margin-top:8px; font-family:'EB Garamond',Georgia,serif; font-size:11px; letter-spacing:0.3px; text-transform:none; color:#8a6d45; }
+  footer .credit a { color:inherit; }
 </style>
 </head>
 <body>
@@ -815,6 +817,7 @@
   <footer>
     <em class="gold-text">It’s Magic.</em>
     Magic MARCeting
+    <small class="credit">Powered by <a href="https://www.geoapify.com/" target="_blank" rel="noopener">Geoapify</a> · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</small>
   </footer>
 
 </main>
@@ -929,7 +932,8 @@ async function runSearch() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ city, type })
     });
-    const data = await resp.json();
+    let data;
+    try { data = await resp.json(); } catch (e) { throw new Error('The search service did not respond (' + resp.status + '). Please try again.'); }
 
     if (data.error) throw new Error(data.error);
 
