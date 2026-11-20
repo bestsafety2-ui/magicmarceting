@@ -1,108 +1,161 @@
-const https = require('https');
+// Magic MARCeting — lead search (Netlify function)
+// POST { city, type }  ->  { success, total, businesses: [...] }  or  { error }
+// Free data: OpenStreetMap (Nominatim/Photon to find the city, Overpass for businesses). No API key.
 
-const get = (url, headers) => new Promise((resolve, reject) => {
-  https.get(url, { headers: headers || { 'User-Agent': 'MagicMARCeting/1.0' } }, (res) => {
-    let raw = '';
-    res.on('data', chunk => raw += chunk);
-    res.on('end', () => {
-      try { resolve({ status: res.statusCode, data: JSON.parse(raw) }); }
-      catch(e) { resolve({ status: res.statusCode, data: { raw: raw.substring(0, 300) } }); }
-    });
-  }).on('error', reject);
-});
+const UA = 'MagicMARCeting-LeadFinder/2.0 (+https://magicmarceting.netlify.app)';
+const BUDGET_MS = 9000; // Netlify cuts functions off at ~10s, so stay under it
 
-exports.handler = async function(event) {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Content-Type': 'application/json'
-  };
+const HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Content-Type': 'application/json'
+};
 
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
+// Each business type searches several OpenStreetMap tags, so more real places show up
+const TYPE_TAGS = {
+  'restaurant':       ['amenity~"^(restaurant|cafe|fast_food|bar|pub|ice_cream)$"'],
+  'salon':            ['shop~"^(hairdresser|beauty|barber|cosmetics|massage|tattoo|nails)$"'],
+  'gym':              ['leisure~"^(fitness_centre|sports_centre)$"', 'sport~"^(martial_arts|boxing|yoga|crossfit)$"'],
+  'contractor':       ['craft~"^(builder|carpenter|electrician|plumber|roofer|painter|hvac|tiler|floorer|plasterer|window_construction)$"', 'office~"^(construction_company|contractor)$"'],
+  'realtor':          ['office~"^(estate_agent|property_management)$"'],
+  'retail':           ['shop~"^(clothes|boutique|shoes|gift|jewelry|fashion_accessories|bag)$"'],
+  'food truck':       ['amenity~"^(fast_food|food_court)$"', 'street_vendor=yes'],
+  'cleaning service': ['shop~"^(dry_cleaning|laundry)$"', 'craft=cleaning', 'office=cleaning'],
+  'dentist':          ['amenity=dentist', 'healthcare=dentist'],
+  'auto repair':      ['shop~"^(car_repair|tyres|car_parts|car)$"', 'amenity=car_wash']
+};
 
-  let body = {};
-  try { body = typeof event.body === 'string' ? JSON.parse(event.body) : (event.body || {}); }
-  catch(e) { return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON' }) }; }
+function respond(statusCode, obj) {
+  return { statusCode, headers: HEADERS, body: JSON.stringify(obj) };
+}
 
-  const { city, type } = body;
-  if (!city) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing city' }) };
-
-  const typeMap = {
-    'restaurant': 'amenity=restaurant',
-    'salon': 'shop=hairdresser',
-    'gym': 'leisure=fitness_centre',
-    'contractor': 'craft=construction',
-    'realtor': 'office=estate_agent',
-    'retail': 'shop=clothes',
-    'food truck': 'amenity=fast_food',
-    'cleaning service': 'shop=cleaning',
-    'dentist': 'amenity=dentist',
-    'auto repair': 'shop=car_repair'
-  };
-
-  const osmTag = typeMap[type] || 'amenity=restaurant';
-  const [tagKey, tagVal] = osmTag.split('=');
-
+async function getJSON(url, ms, extraHeaders) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
   try {
-    // Step 1: Geocode city using Nominatim
-    const geocodeUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`;
-    const geo = await get(geocodeUrl, { 'User-Agent': 'MagicMARCeting/1.0', 'Accept': 'application/json' });
-
-    if (!geo.data || !geo.data[0]) {
-      return { statusCode: 200, headers, body: JSON.stringify({ error: `Could not find city: ${city}. Try just the city name like "Miami" or "Chicago".` }) };
-    }
-
-    const { lat, lon, display_name } = geo.data[0];
-
-    // Step 2: Search Overpass by coordinates (15km radius)
-    const query = `[out:json][timeout:30];(node["${tagKey}"="${tagVal}"](around:15000,${lat},${lon});way["${tagKey}"="${tagVal}"](around:15000,${lat},${lon}););out body 50;`;
-    const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
-    const result = await get(overpassUrl);
-
-    if (result.status !== 200 || !result.data.elements) {
-      return { statusCode: 200, headers, body: JSON.stringify({ error: `OpenStreetMap search failed. Try again in a moment.` }) };
-    }
-
-    const seen = new Set();
-    const businesses = [];
-
-    for (const el of result.data.elements) {
-      const tags = el.tags || {};
-      const name = tags.name;
-      if (!name || seen.has(name)) continue;
-      seen.add(name);
-
-      const website = tags.website || tags['contact:website'] || null;
-      const phone = tags.phone || tags['contact:phone'] || tags['contact:mobile'] || 'N/A';
-      const addr = [
-        tags['addr:housenumber'],
-        tags['addr:street'],
-        tags['addr:city']
-      ].filter(Boolean).join(' ') || city;
-
-      businesses.push({
-        name,
-        address: addr,
-        phone,
-        website,
-        hasWebsite: !!website,
-        rating: 'N/A',
-        categories: type
-      });
-
-      if (businesses.length >= 30) break;
-    }
-
-    if (!businesses.length) {
-      return { statusCode: 200, headers, body: JSON.stringify({
-        error: `No ${type}s found near ${city}. OSM data may be limited for this area. Try a larger city.`
-      })};
-    }
-
-    return { statusCode: 200, headers, body: JSON.stringify({ success: true, total: businesses.length, businesses }) };
-
-  } catch(e) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: e.message }) };
+    const res = await fetch(url, {
+      headers: { 'User-Agent': UA, 'Accept': 'application/json', ...(extraHeaders || {}) },
+      signal: ctrl.signal
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
   }
+}
+
+// Find the city's coordinates. Nominatim first, Photon as a backup.
+async function geocode(city) {
+  try {
+    const q = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(city)}`;
+    const data = await getJSON(q, 3500, { 'Accept-Language': 'en' });
+    if (data && data[0]) return { lat: +data[0].lat, lon: +data[0].lon, label: data[0].display_name };
+  } catch (e) { /* fall through to backup */ }
+  try {
+    const q = `https://photon.komoot.io/api/?limit=1&q=${encodeURIComponent(city)}`;
+    const data = await getJSON(q, 3000);
+    const f = data && data.features && data.features[0];
+    if (f) return { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], label: f.properties.name };
+  } catch (e) { /* nothing found */ }
+  return null;
+}
+
+// Ask several Overpass servers at once and take whichever answers first
+async function overpass(query, ms) {
+  const servers = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter'
+  ];
+  const attempts = servers.map(s =>
+    getJSON(`${s}?data=${encodeURIComponent(query)}`, ms).then(d => {
+      if (!d || !Array.isArray(d.elements)) throw new Error('bad response');
+      return d;
+    })
+  );
+  return Promise.any(attempts);
+}
+
+function buildQuery(tags, lat, lon, radius) {
+  const around = `(around:${radius},${lat},${lon})`;
+  const parts = tags.map(t => `nwr[${t}][name]${around};`).join('');
+  return `[out:json][timeout:8];(${parts});out center tags 200;`;
+}
+
+function toBusiness(el, type, city) {
+  const t = el.tags || {};
+  const website = t.website || t['contact:website'] || t.url || null;
+  // Chains (McDonald's, Great Clips...) always have a corporate site, so they aren't real leads
+  const isChain = !!(t.brand || t['brand:wikidata']);
+  const phone = t.phone || t['contact:phone'] || t['contact:mobile'] || 'N/A';
+  const street = [t['addr:housenumber'], t['addr:street']].filter(Boolean).join(' ');
+  const address = [street, t['addr:city']].filter(Boolean).join(', ') || city;
+  return {
+    name: t.name,
+    address,
+    phone,
+    website,
+    hasWebsite: !!website || isChain,
+    chain: isChain,
+    email: t.email || t['contact:email'] || null,
+    instagram: t['contact:instagram'] || null,
+    facebook: t['contact:facebook'] || null,
+    rating: 'N/A',
+    categories: type
+  };
+}
+
+exports.handler = async function (event) {
+  if (event.httpMethod === 'OPTIONS') return respond(200, {});
+  if (event.httpMethod !== 'POST') return respond(405, { error: 'Use POST with { city, type }' });
+
+  const started = Date.now();
+  let body;
+  try { body = typeof event.body === 'string' ? JSON.parse(event.body) : (event.body || {}); }
+  catch (e) { return respond(400, { error: 'Invalid JSON' }); }
+
+  const city = String(body.city || '').trim();
+  const type = String(body.type || 'restaurant').trim();
+  if (!city) return respond(400, { error: 'Please enter a city.' });
+  const tags = TYPE_TAGS[type] || TYPE_TAGS['restaurant'];
+
+  const geo = await geocode(city);
+  if (!geo) {
+    return respond(200, { error: `Couldn't find "${city}". Try adding the state, like "Lombard, IL".` });
+  }
+
+  // Search 6 km around the city; if that's thin and time allows, widen to 15 km
+  let elements = [];
+  for (const radius of [6000, 15000]) {
+    const timeLeft = BUDGET_MS - (Date.now() - started);
+    if (timeLeft < 2500) break;
+    try {
+      const data = await overpass(buildQuery(tags, geo.lat, geo.lon, radius), timeLeft - 300);
+      elements = data.elements;
+    } catch (e) {
+      if (!elements.length) {
+        return respond(200, { error: 'The map servers are busy right now. Please try again in a minute.' });
+      }
+      break;
+    }
+    if (elements.length >= 25) break;
+  }
+
+  const seen = new Set();
+  const businesses = [];
+  for (const el of elements) {
+    const name = el.tags && el.tags.name;
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    businesses.push(toBusiness(el, type, city));
+  }
+
+  // No-website leads first, then cap the list
+  businesses.sort((a, b) => Number(a.hasWebsite) - Number(b.hasWebsite));
+  const list = businesses.slice(0, 80);
+
+  return respond(200, { success: true, total: list.length, location: geo.label, businesses: list });
 };
